@@ -18,7 +18,7 @@ import (
 	"github.com/hpcloud/tail/ratelimiter"
 	"github.com/hpcloud/tail/util"
 	"github.com/hpcloud/tail/watch"
-	"gopkg.in/tomb.v1"
+	"gopkg.in/tomb.v2"
 )
 
 var (
@@ -132,7 +132,7 @@ func TailFile(filename string, config Config) (*Tail, error) {
 		}
 	}
 
-	go t.tailFileSync()
+	t.Go(t.tailFileSync)
 
 	return t, nil
 }
@@ -225,8 +225,7 @@ func (tail *Tail) readLine() (string, error) {
 	return line, err
 }
 
-func (tail *Tail) tailFileSync() {
-	defer tail.Done()
+func (tail *Tail) tailFileSync() error {
 	defer tail.close()
 	defer func() {
 		offset, err := tail.Tell()
@@ -242,9 +241,9 @@ func (tail *Tail) tailFileSync() {
 		err := tail.reopen()
 		if err != nil {
 			if err != tomb.ErrDying {
-				tail.Kill(err)
+				return err
 			}
-			return
+			return nil
 		}
 	}
 
@@ -253,8 +252,7 @@ func (tail *Tail) tailFileSync() {
 		_, err := tail.file.Seek(tail.Location.Offset, tail.Location.Whence)
 		tail.Logger.Printf("Seeked %s - %+v\n", tail.Filename, tail.Location)
 		if err != nil {
-			tail.Killf("Seek error on %s: %s", tail.Filename, err)
-			return
+			return fmt.Errorf("Seek error on %s: %s", tail.Filename, err)
 		}
 	}
 
@@ -270,8 +268,7 @@ func (tail *Tail) tailFileSync() {
 			// grab the position in case we need to back up in the event of a half-line
 			offset, err = tail.Tell()
 			if err != nil {
-				tail.Kill(err)
-				return
+				return err
 			}
 		}
 
@@ -290,11 +287,10 @@ func (tail *Tail) tailFileSync() {
 				select {
 				case <-time.After(time.Second):
 				case <-tail.Dying():
-					return
+					return nil
 				}
 				if err := tail.seekEnd(); err != nil {
-					tail.Kill(err)
-					return
+					return err
 				}
 			}
 		} else if err == io.EOF {
@@ -302,7 +298,7 @@ func (tail *Tail) tailFileSync() {
 				if line != "" {
 					tail.sendLine(line)
 				}
-				return
+				return nil
 			}
 
 			if tail.Follow && line != "" {
@@ -310,8 +306,7 @@ func (tail *Tail) tailFileSync() {
 				// it's not followed by a newline; seems a fair trade here
 				err := tail.seekTo(SeekInfo{Offset: offset, Whence: 0})
 				if err != nil {
-					tail.Kill(err)
-					return
+					return err
 				}
 			}
 
@@ -321,14 +316,13 @@ func (tail *Tail) tailFileSync() {
 			err := tail.waitForChanges()
 			if err != nil {
 				if err != ErrStop {
-					tail.Kill(err)
+					return err
 				}
-				return
+				return nil
 			}
 		} else {
 			// non-EOF error
-			tail.Killf("Error reading %s: %s", tail.Filename, err)
-			return
+			return fmt.Errorf("Error reading %s: %s", tail.Filename, err)
 		}
 
 		select {
@@ -336,7 +330,7 @@ func (tail *Tail) tailFileSync() {
 			if tail.Err() == errStopAtEOF {
 				continue
 			}
-			return
+			return nil
 		default:
 		}
 	}

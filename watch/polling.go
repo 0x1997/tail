@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hpcloud/tail/util"
-	"gopkg.in/tomb.v1"
+	"gopkg.in/tomb.v2"
 )
 
 // PollingFileWatcher polls the file for changes.
@@ -56,12 +56,12 @@ func (fw *PollingFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 
 	fw.Size = pos
 
-	go func() {
+	t.Go(func() error {
 		prevSize := fw.Size
 		for {
 			select {
 			case <-t.Dying():
-				return
+				return nil
 			default:
 			}
 
@@ -73,7 +73,7 @@ func (fw *PollingFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 				if os.IsNotExist(err) || (runtime.GOOS == "windows" && os.IsPermission(err)) {
 					// File does not exist (has been deleted).
 					changes.NotifyDeleted()
-					return
+					return nil
 				}
 
 				// XXX: report this error back to the user
@@ -83,7 +83,7 @@ func (fw *PollingFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 			// File got moved/renamed?
 			if !os.SameFile(origFi, fi) {
 				changes.NotifyDeleted()
-				return
+				return nil
 			}
 
 			// File got truncated?
@@ -108,7 +108,7 @@ func (fw *PollingFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 				changes.NotifyModified()
 			}
 		}
-	}()
+	})
 
 	return changes, nil
 }

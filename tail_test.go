@@ -265,13 +265,13 @@ func TestTell(t *testing.T) {
 		Follow:   false,
 		Location: &SeekInfo{0, os.SEEK_SET}}
 	tail := tailTest.StartTail("test.txt", config)
-	// read noe line
+	// read one line
 	<-tail.Lines
 	offset, err := tail.Tell()
 	if err != nil {
 		tailTest.Errorf("Tell return error: %s", err.Error())
 	}
-	tail.Done()
+	tail.Kill(nil)
 	// tail.close()
 
 	config = Config{
@@ -288,7 +288,7 @@ func TestTell(t *testing.T) {
 		break
 	}
 	tailTest.RemoveFile("test.txt")
-	tail.Done()
+	tail.Kill(nil)
 	tail.Cleanup()
 }
 

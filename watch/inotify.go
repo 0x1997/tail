@@ -11,7 +11,7 @@ import (
 	"github.com/hpcloud/tail/util"
 
 	"gopkg.in/fsnotify.v1"
-	"gopkg.in/tomb.v1"
+	"gopkg.in/tomb.v2"
 )
 
 // InotifyFileWatcher uses inotify to monitor file changes.
@@ -74,7 +74,7 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 	changes := NewFileChanges()
 	fw.Size = pos
 
-	go func() {
+	t.Go(func() error {
 
 		events := Events(fw.Filename)
 
@@ -88,19 +88,19 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 			case evt, ok = <-events:
 				if !ok {
 					RemoveWatch(fw.Filename)
-					return
+					return nil
 				}
 			case <-t.Dying():
 				RemoveWatch(fw.Filename)
-				return
+				return nil
 			}
 
 			switch {
 			//With an open fd, unlink(fd) - inotify returns IN_ATTRIB (==fsnotify.Chmod)
 			case evt.Op&fsnotify.Chmod == fsnotify.Chmod:
 				if _, err := os.Stat(fw.Filename); err != nil {
-					if ! os.IsNotExist(err) {
-						return
+					if !os.IsNotExist(err) {
+						return nil
 					}
 				}
 				fallthrough
@@ -111,7 +111,7 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 			case evt.Op&fsnotify.Rename == fsnotify.Rename:
 				RemoveWatch(fw.Filename)
 				changes.NotifyDeleted()
-				return
+				return nil
 
 			case evt.Op&fsnotify.Write == fsnotify.Write:
 				fi, err := os.Stat(fw.Filename)
@@ -119,7 +119,7 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 					if os.IsNotExist(err) {
 						RemoveWatch(fw.Filename)
 						changes.NotifyDeleted()
-						return
+						return nil
 					}
 					// XXX: report this error back to the user
 					util.Fatal("Failed to stat file %v: %v", fw.Filename, err)
@@ -134,7 +134,7 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 				prevSize = fw.Size
 			}
 		}
-	}()
+	})
 
 	return changes, nil
 }
