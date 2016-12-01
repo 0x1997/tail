@@ -57,12 +57,13 @@ type logger interface {
 // Config is used to specify how a file must be tailed.
 type Config struct {
 	// File-specifc
-	Location    *SeekInfo // Seek to this location before tailing
-	ReOpen      bool      // Reopen recreated files (tail -F)
-	MustExist   bool      // Fail early if the file does not exist
-	Poll        bool      // Poll for file changes instead of using inotify
-	Pipe        bool      // Is a named pipe (mkfifo)
-	RateLimiter *ratelimiter.LeakyBucket
+	Location       *SeekInfo // Seek to this location before tailing
+	RememberOffset bool      // Remember offset before closing file
+	ReOpen         bool      // Reopen recreated files (tail -F)
+	MustExist      bool      // Fail early if the file does not exist
+	Poll           bool      // Poll for file changes instead of using inotify
+	Pipe           bool      // Is a named pipe (mkfifo)
+	RateLimiter    *ratelimiter.LeakyBucket
 
 	// Generic IO
 	Follow      bool // Continue looking for new lines (tail -f)
@@ -76,6 +77,7 @@ type Config struct {
 type Tail struct {
 	Filename string
 	Lines    chan *Line
+	Offset   int64
 	Config
 
 	file   *os.File
@@ -226,6 +228,14 @@ func (tail *Tail) readLine() (string, error) {
 func (tail *Tail) tailFileSync() {
 	defer tail.Done()
 	defer tail.close()
+	defer func() {
+		offset, err := tail.Tell()
+		if err == nil {
+			tail.Offset = offset
+		} else {
+			tail.Offset = -1
+		}
+	}()
 
 	if !tail.MustExist {
 		// deferred first open.
