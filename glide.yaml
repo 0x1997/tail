@@ -1,0 +1,5 @@
+package: github.com/hpcloud/tail
+import:
+- package: gopkg.in/fsnotify.v1
+  version: ^1.4.2
+- package: gopkg.in/tomb.v1
