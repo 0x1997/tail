@@ -168,11 +168,11 @@ func (tail *Tail) Stop() error {
 
 // StopAtEOF stops tailing as soon as the end of the file is reached.
 func (tail *Tail) StopAtEOF() error {
-	tail.Kill(errStopAtEOF)
+	tail.Kill(ErrStopAtEOF)
 	return tail.Wait()
 }
 
-var errStopAtEOF = errors.New("tail: stop at eof")
+var ErrStopAtEOF = errors.New("tail: stop at eof")
 
 func (tail *Tail) close() {
 	close(tail.Lines)
@@ -332,7 +332,7 @@ func (tail *Tail) tailFileSync() {
 
 		select {
 		case <-tail.Dying():
-			if tail.Err() == errStopAtEOF {
+			if tail.Err() == ErrStopAtEOF {
 				continue
 			}
 			return
